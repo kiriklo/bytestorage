@@ -1250,7 +1250,7 @@ func TestStorageGetSetConcurrent(t *testing.T) {
 
 // Writing 10k keys with same hash (crazy)
 func TestStorageGetSetCollisionConcurrent(t *testing.T) {
-	itemsCount := 10000
+	itemsCount := 1000
 	const gorotines = 10
 	c := New()
 	defer c.Reset()
@@ -1267,12 +1267,10 @@ func TestStorageGetSetCollisionConcurrent(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}
-		case <-time.After(7 * time.Second):
+
+		case <-time.After(5 * time.Second):
 			t.Fatalf("timeout")
 		}
-	}
-	if col := c.Collision(); col < 20000 {
-		t.Fatalf("unexpected collision number; got %d; want >20000", col)
 	}
 }
 

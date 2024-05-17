@@ -1,3 +1,5 @@
+[![Build Status](https://github.com/kiriklo/bytestorage/workflows/main/badge.svg)](https://github.com/kiriklo/bytestorage/actions)
+[![codecov](https://codecov.io/gh/kiriklo/bytestorage/branch/master/graph/badge.svg)](https://codecov.io/gh/kiriklo/bytestorage/)
 # bytestorage - fast thread-safe inmemory storage in Go
 
 ### Features

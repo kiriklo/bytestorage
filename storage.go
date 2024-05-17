@@ -256,16 +256,16 @@ func (b *bucket) init() {
 
 func (b *bucket) reset() {
 	b.mu.Lock()
-	b.size = 0
+	atomic.StoreUint64(&b.size, 0)
 	clear(b.m)
 	clear(b.col)
 	clear(b.kv)
 	clear(b.free)
 	b.offset = 0
-	b.getCalls = 0
-	b.setCalls = 0
-	b.misses = 0
-	b.collisions = 0
+	atomic.StoreUint64(&b.getCalls, 0)
+	atomic.StoreUint64(&b.setCalls, 0)
+	atomic.StoreUint64(&b.misses, 0)
+	atomic.StoreUint64(&b.collisions, 0)
 	b.mu.Unlock()
 }
 
@@ -301,9 +301,9 @@ func (b *bucket) get(dst, k []byte, h uint64) ([]byte, bool) {
 	var idx uint64
 	var idxs []uint64
 	// Collision protection
-	if atomic.LoadUint64(&b.collisions) > 0 {
+	b.mu.RLock()
+	if len(b.col[h]) > 0 {
 		// Check if hash is in collision map
-		b.mu.RLock()
 		idxs, found = b.col[h]
 		// Hash is in col
 		if found {
@@ -322,7 +322,6 @@ func (b *bucket) get(dst, k []byte, h uint64) ([]byte, bool) {
 		// No collision for this hash, continue to search in m
 		goto mcheck
 	}
-	b.mu.RLock()
 mcheck:
 	idx, found = b.m[h]
 	if found {
@@ -344,8 +343,8 @@ func (b *bucket) has(k []byte, h uint64) bool {
 	var found bool
 	var idx uint64
 	var idxs []uint64
-	if atomic.LoadUint64(&b.collisions) > 0 {
-		b.mu.RLock()
+	b.mu.RLock()
+	if len(b.col[h]) > 0 {
 		idxs, found = b.col[h]
 		if found {
 			atomic.AddUint64(&b.collisions, 1)
@@ -362,7 +361,6 @@ func (b *bucket) has(k []byte, h uint64) bool {
 		// No collision for this hash, continue to search in m
 		goto mcheck
 	}
-	b.mu.RLock()
 mcheck:
 	idx, found = b.m[h]
 	if found {
@@ -387,9 +385,8 @@ func (b *bucket) set(k, v []byte, h uint64) {
 	// It's slow to check the col every time to see if it conains the hash.
 	// Because collision is unlikely to happen we can just check if b.collisions
 	// is null instaed of locking collision map (col) every time we call set/get.
+	b.mu.Lock()
 	if atomic.LoadUint64(&b.collisions) != 0 {
-		b.mu.Lock()
-
 		// Check if given hash exist in collision map
 		idxs, found = b.col[h]
 		if found {
@@ -404,7 +401,8 @@ func (b *bucket) set(k, v []byte, h uint64) {
 
 					// Split into 2 separate uint64 to avoid uint64 overflow in case
 					// length of new value in smaller then length of value in kv
-					b.size += uint64(len(v)) - uint64(len(b.kv[idx][1]))
+					atomic.AddUint64(&b.size, uint64(len(v))-uint64(len(b.kv[idx][1])))
+					//b.size += uint64(len(v)) - uint64(len(b.kv[idx][1]))
 
 					// Slice has enough capacity to contain v
 					if cap(b.kv[idx][1]) >= len(v) {
@@ -423,7 +421,6 @@ func (b *bucket) set(k, v []byte, h uint64) {
 		}
 		goto mcheck
 	}
-	b.mu.Lock()
 mcheck:
 	// Check if key already exist in map
 	idx, found = b.m[h]
@@ -431,7 +428,8 @@ mcheck:
 		// Second collision check
 		if string(b.kv[idx][0]) != string(k) {
 			// Found a new pair of keys that has the same hash
-			b.collisions++
+			atomic.AddUint64(&b.collisions, 1)
+			//b.collisions++
 			newIdxs := make([]uint64, 2)
 			// Add old key idx
 			newIdxs[0] = idx
@@ -448,7 +446,8 @@ mcheck:
 			goto end
 		}
 
-		b.size += uint64(len(v)) - uint64(len(b.kv[idx][1]))
+		atomic.AddUint64(&b.size, uint64(len(v))-uint64(len(b.kv[idx][1])))
+		//b.size += uint64(len(v)) - uint64(len(b.kv[idx][1]))
 		// Slice has enough capacity to contain v
 		if cap(b.kv[idx][1]) >= len(v) {
 			b.kv[idx][1] = b.kv[idx][1][:len(v)]
@@ -461,7 +460,7 @@ mcheck:
 	// Check if free space exist
 	if l := len(b.free); l > 0 {
 		idx = b.free[l-1]
-		b.size += uint64(len(k) + len(v))
+		atomic.AddUint64(&b.size, uint64(len(v)+len(k)))
 
 		// Slice has enough capacity to contain key
 		if cap(b.kv[idx][0]) >= len(k) {
@@ -515,7 +514,7 @@ add:
 		b.kv = append(b.kv, newKv)
 	}
 	b.offset++
-	b.size += uint64(len(v) + len(k))
+	atomic.AddUint64(&b.size, uint64(len(v)+len(k)))
 end:
 	b.mu.Unlock()
 }
@@ -525,17 +524,18 @@ func (b *bucket) del(k []byte, h uint64) {
 	var idx uint64
 	var pos int
 	var idxs []uint64
-	if atomic.LoadUint64(&b.collisions) > 0 {
+	b.mu.Lock()
+	if len(b.col[h]) > 0 {
 		// Check if hash is in collision map
-		b.mu.Lock()
 		idxs, found = b.col[h]
 		// Hash is in col
 		if found {
-			b.collisions++
+			atomic.AddUint64(&b.collisions, 1)
 			for pos, idx = range idxs {
 				// Key exist in kv
 				if string(b.kv[idx][0]) == string(k) {
-					b.size -= uint64(len(b.kv[idx][0]) + len(b.kv[idx][1]))
+					atomic.AddUint64(&b.size, -uint64(len(b.kv[idx][0])+len(b.kv[idx][1])))
+					//b.size -= uint64(len(b.kv[idx][0]) + len(b.kv[idx][1]))
 
 					// Clear kv[i] but keep allocated memory
 					b.kv[idx][0] = b.kv[idx][0][0:0]
@@ -568,27 +568,28 @@ func (b *bucket) del(k []byte, h uint64) {
 				}
 			}
 			// Hash exist in col but could not find the given k
-			b.misses++
+			atomic.AddUint64(&b.misses, 1)
 			goto end
 		}
 		goto mcheck
 	}
 
-	b.mu.Lock()
+	//b.mu.Lock()
 mcheck:
 	idx, found = b.m[h]
 	if !found {
 		goto end
 	}
 	if string(b.kv[idx][0]) == string(k) {
-		b.size -= uint64(len(b.kv[idx][0]) + len(b.kv[idx][1]))
+		atomic.AddUint64(&b.size, -uint64(len(b.kv[idx][0])+len(b.kv[idx][1])))
+		//b.size -= uint64(len(b.kv[idx][0]) + len(b.kv[idx][1]))
 		b.kv[idx][0] = b.kv[idx][0][0:0]
 		b.kv[idx][1] = b.kv[idx][1][0:0]
 		b.free = append(b.free, idx)
 		delete(b.m, h)
 		goto end
 	}
-	b.collisions++
+	atomic.AddUint64(&b.collisions, 1)
 end:
 	b.mu.Unlock()
 }

@@ -229,7 +229,7 @@ type bucket struct {
 	// Main key-value byte slice. Both m and col shares it.
 	kv [][2][]byte
 
-	// Contains deleted entires in kv
+	// Contains deleted entries in kv
 	free []uint64
 
 	// Bucket offset shows the position of last entry in the kv.
@@ -337,7 +337,7 @@ end:
 	return dst, found
 }
 
-// Need for compatability with fastcache
+// Need for compatibility  with fastcache
 func (b *bucket) has(k []byte, h uint64) bool {
 	atomic.AddUint64(&b.getCalls, 1)
 	var found bool
@@ -382,9 +382,9 @@ func (b *bucket) set(k, v []byte, h uint64) {
 	var idx uint64
 	var idxs []uint64
 
-	// It's slow to check the col every time to see if it conains the hash.
+	// It's slow to check the col every time to see if it contains the hash.
 	// Because collision is unlikely to happen we can just check if b.collisions
-	// is null instaed of locking collision map (col) every time we call set/get.
+	// is null instead of locking collision map (col) every time we call set/get.
 	b.mu.Lock()
 	if atomic.LoadUint64(&b.collisions) != 0 {
 		// Check if given hash exist in collision map
@@ -400,9 +400,8 @@ func (b *bucket) set(k, v []byte, h uint64) {
 					}
 
 					// Split into 2 separate uint64 to avoid uint64 overflow in case
-					// length of new value in smaller then length of value in kv
+					// length of new value in smaller than length of value in kv
 					atomic.AddUint64(&b.size, uint64(len(v))-uint64(len(b.kv[idx][1])))
-					//b.size += uint64(len(v)) - uint64(len(b.kv[idx][1]))
 
 					// Slice has enough capacity to contain v
 					if cap(b.kv[idx][1]) >= len(v) {
@@ -447,7 +446,6 @@ mcheck:
 		}
 
 		atomic.AddUint64(&b.size, uint64(len(v))-uint64(len(b.kv[idx][1])))
-		//b.size += uint64(len(v)) - uint64(len(b.kv[idx][1]))
 		// Slice has enough capacity to contain v
 		if cap(b.kv[idx][1]) >= len(v) {
 			b.kv[idx][1] = b.kv[idx][1][:len(v)]
@@ -535,7 +533,6 @@ func (b *bucket) del(k []byte, h uint64) {
 				// Key exist in kv
 				if string(b.kv[idx][0]) == string(k) {
 					atomic.AddUint64(&b.size, -uint64(len(b.kv[idx][0])+len(b.kv[idx][1])))
-					//b.size -= uint64(len(b.kv[idx][0]) + len(b.kv[idx][1]))
 
 					// Clear kv[i] but keep allocated memory
 					b.kv[idx][0] = b.kv[idx][0][0:0]
@@ -556,7 +553,7 @@ func (b *bucket) del(k []byte, h uint64) {
 						goto end
 					}
 					// There are 2 keys that causes hash collision. So after removing one of them
-					// collision will not exists any more. Remove this hash from collision map and
+					// collision will not exist anymore. Remove this hash from collision map and
 					// add it to m
 					if len(idxs) != 1 {
 						panic("BUG: idxs size is not 1.")
@@ -580,7 +577,6 @@ mcheck:
 	}
 	if string(b.kv[idx][0]) == string(k) {
 		atomic.AddUint64(&b.size, -uint64(len(b.kv[idx][0])+len(b.kv[idx][1])))
-		//b.size -= uint64(len(b.kv[idx][0]) + len(b.kv[idx][1]))
 		b.kv[idx][0] = b.kv[idx][0][0:0]
 		b.kv[idx][1] = b.kv[idx][1][0:0]
 		b.free = append(b.free, idx)

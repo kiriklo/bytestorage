@@ -1,4 +1,4 @@
-module byte-storage
+module github.com/kiriklo/bytestorage
 
 go 1.21.3
 

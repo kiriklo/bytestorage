@@ -302,7 +302,7 @@ func (b *bucket) get(dst, k []byte, h uint64) ([]byte, bool) {
 	var idxs []uint64
 	// Collision protection
 	b.mu.RLock()
-	if len(b.col[h]) > 0 {
+	if atomic.LoadUint64(&b.collisions) != 0 {
 		// Check if hash is in collision map
 		idxs, found = b.col[h]
 		// Hash is in col
@@ -344,7 +344,7 @@ func (b *bucket) has(k []byte, h uint64) bool {
 	var idx uint64
 	var idxs []uint64
 	b.mu.RLock()
-	if len(b.col[h]) > 0 {
+	if atomic.LoadUint64(&b.collisions) != 0 {
 		idxs, found = b.col[h]
 		if found {
 			atomic.AddUint64(&b.collisions, 1)
@@ -525,7 +525,7 @@ func (b *bucket) del(k []byte, h uint64) {
 	var pos int
 	var idxs []uint64
 	b.mu.Lock()
-	if len(b.col[h]) > 0 {
+	if atomic.LoadUint64(&b.collisions) != 0 {
 		// Check if hash is in collision map
 		idxs, found = b.col[h]
 		// Hash is in col
@@ -573,8 +573,6 @@ func (b *bucket) del(k []byte, h uint64) {
 		}
 		goto mcheck
 	}
-
-	//b.mu.Lock()
 mcheck:
 	idx, found = b.m[h]
 	if !found {

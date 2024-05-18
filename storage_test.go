@@ -546,6 +546,9 @@ func TestStorageCollision(t *testing.T) {
 	}
 
 	c.colDel([]byte("bbbbbb"), brokenHash)
+	if v := c.colGet(nil, []byte("bbbbbb"), brokenHash2); string(v) != "" {
+		t.Fatalf("unexpected value obtained; got %q; want %q", v, "")
+	}
 	c.colDel([]byte("bbb"), brokenHash)
 	if v := c.colGet(nil, []byte("bbb"), brokenHash); string(v) != "" {
 		t.Fatalf("unexpected value obtained; got %q; want %q", v, "")
@@ -553,7 +556,6 @@ func TestStorageCollision(t *testing.T) {
 	if v := c.colHas([]byte("bbb"), brokenHash); v != false {
 		t.Fatalf("unexpected value obtained; got %v; want false", v)
 	}
-
 	c.Set([]byte("ffffffffffffffffffff"), []byte("gggggggggg"))
 	if v := c.Get(nil, []byte("ffffffffffffffffffff")); string(v) != "gggggggggg" {
 		t.Fatalf("unexpected value obtained; got %q; want %q", v, "gggggggggg")

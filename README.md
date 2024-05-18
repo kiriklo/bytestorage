@@ -12,6 +12,8 @@
 * Hash collision handling using [open addressing](https://en.wikipedia.org/wiki/Open_addressing).
 * Simple source code, no unsafe pointers or byte shifting.
 * No limitations on key/value size
+* Faster key hash calculation by using [xxh3](https://github.com/zeebo/xxh3) instead of [xxhash](https://github.com/cespare/xxhash/v2)
+* Delete operations have been optimized by keeping allocated memory for further element inserts.
 
 ### Benchmarks
 
@@ -44,13 +46,13 @@ BenchmarkSyncMapSetGet-4            2436           5156542 ns/op          25.42 
 
 * Keys and values must be byte slices. Other types must be marshaled before
   storing them in the cache.
-* You should think about bytestorage as sync map rather then cache. Bytestorage
-  has no overflow, so you should control it's size.
+* You should think about bytestorage as sync map rather than cache. Bytestorage
+  has no overflow, so you should control its size.
 
 ### Architecture details
 
 Bytestorage is based on [Fastcache](https://github.com/VictoriaMetrics/fastcache). It has similar api, but
-bucket structure is a bit diffrent.
+bucket structure is a bit different.
 
 * The cache consists of many buckets, each with its own lock.
   This helps scaling the performance on multi-core CPUs, since multiple
@@ -58,3 +60,12 @@ bucket structure is a bit diffrent.
 * Each bucket consists of a `hash(key) -> (key, value) position` map, 
   `hash(key) -> [](key, value) positions` collision map and 3d
   byte slice holding `(key, value)` entries.
+
+### What is it good for?
+
+Bytestorage is a 'faster sync map', so if your keys are not changing frequently and you control storage
+size - it will work fine.
+
+### What is it not good for?
+
+If you have a high key changing rate and you don't want to control storage size, then you should prefer using [Fastcache](https://github.com/VictoriaMetrics/fastcache).

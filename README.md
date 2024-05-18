@@ -8,7 +8,8 @@
 * Thread-safe. Concurrent goroutines may read and write into a single
   storage instance.
 * Hash collision handling using [open addressing](https://en.wikipedia.org/wiki/Open_addressing).
-* Simple source code.
+* Simple source code, no unsafe pointers or byte shifting.
+* No limitations on key/value size
 
 ### Benchmarks
 
@@ -41,3 +42,17 @@ BenchmarkSyncMapSetGet-4            2436           5156542 ns/op          25.42 
 
 * Keys and values must be byte slices. Other types must be marshaled before
   storing them in the cache.
+* You should think about bytestorage as sync map rather then cache. Bytestorage
+  has no overflow, so you should control it's size.
+
+### Architecture details
+
+Bytestorage is based on [Fastcache](https://github.com/VictoriaMetrics/fastcache). It has similar api, but
+bucket structure is a bit diffrent.
+
+* The cache consists of many buckets, each with its own lock.
+  This helps scaling the performance on multi-core CPUs, since multiple
+  CPUs may concurrently access distinct buckets.
+* Each bucket consists of a `hash(key) -> (key, value) position` map, 
+  `hash(key) -> [](key, value) positions` collision map and 3d
+  byte slice holding `(key, value)` entries.
